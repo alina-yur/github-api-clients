@@ -1,10 +1,9 @@
+#!/usr/bin/env python3
 #
 # Lists the unassigned open pull requests and issues at https://github.com/oracle/graal 
 #
 
-import sys, os, argparse
-
-import requests # pip install requests
+import sys, os, argparse, json, urllib.request
 
 token = os.environ.get("GITHUB_TOKEN")
 if token is None:
@@ -12,11 +11,13 @@ if token is None:
 headers = {"Authorization": "Bearer " + token}
 
 def run_query(query):
-    request = requests.post('https://api.github.com/graphql', json={'query': query}, headers=headers)
-    if request.status_code == 200:
-        return request.json()
-    else:
-        raise Exception("Query failed to run by returning code of {}. {}".format(request.status_code, query))
+    req = urllib.request.Request(url='https://api.github.com/graphql', data=json.dumps({'query' : query}).encode('utf-8'), headers=headers)
+    with urllib.request.urlopen(req) as f:
+        if f.status == 200:
+            result = f.read().decode('utf-8')
+            return json.loads(result)
+        else:
+            raise Exception("Query failed to run by returning code of {}. {}".format(f.status, query))
 
 
 def get_open_nodes_query(node_type, cursor=None):
