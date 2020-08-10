@@ -2,7 +2,8 @@
 # Lists the unassigned open pull requests and issues at https://github.com/oracle/graal 
 #
 
-import sys, os
+import sys, os, argparse
+
 import requests # pip install requests
 
 token = os.environ.get("GITHUB_TOKEN")
@@ -73,11 +74,19 @@ def get_nodes(node_type):
 
 def show_unassigned_nodes(node_type):
     nodes = get_nodes(node_type)
-    print("Unassigned open " + node_type + "s:")
+    total_unassigned = 0
     for _, node in sorted(nodes.items()):
         num_assignees = int(node["assignees"]["totalCount"])
         if num_assignees == 0:
             print('  {}: "{}"'.format(node["url"], node["title"]))
+            total_unassigned += 1
+    print("Total unassigned open " + node_type + "s: " + str(total_unassigned))
 
-show_unassigned_nodes('pullRequest')
-show_unassigned_nodes('issue')
+def main():
+    p = argparse.ArgumentParser()
+    p.parse_args()
+
+    show_unassigned_nodes('pullRequest')
+    show_unassigned_nodes('issue')
+
+main()
