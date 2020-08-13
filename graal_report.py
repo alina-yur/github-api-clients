@@ -21,45 +21,47 @@ def run_query(query):
         else:
             raise Exception("Query failed to run by returning code of {}. {}".format(f.status, query))
 
-def get_open_nodes_query(node_type, cursor=None):
+_node_info1 = """
+number
+url
+title
+assignees(first: 1) {
+  totalCount
+}
+timelineItems(last:10) {
+  edges {
+    node {
+      ... on IssueComment {
+        updatedAt
+        url
+        author {
+          ... on User {
+              organization(login: "oracle") {
+              login
+            }
+          }
+          login
+        }
+      }
+    }
+  }
+}
+"""
+
+def get_open_nodes_query(node_type, node_info, states, cursor=None):
     after = '"{}"'.format(cursor) if cursor else 'null'
     return """
 {
   repositoryOwner(login: "oracle") {
     repository(name: "graal") {
-      """ + node_type + """s(first: 100, states:OPEN, after:""" + after + """) {
+      """ + node_type + """s(first: 100, states:""" + states + """, after:""" + after + """) {
         totalCount
         pageInfo {
           hasNextPage
           endCursor
         }
         edges {
-          node {
-            number
-            url
-            title
-            assignees(first: 1) {
-              totalCount
-            }
-            timelineItems(last:10) {
-              edges {
-                node {
-                  ... on IssueComment {
-                    updatedAt
-                    url
-                    author {
-                      ... on User {
-                          organization(login: "oracle") {
-                          login
-                        }
-                      }
-                      login
-                    }
-                  }
-                }
-              }
-            }
-          }
+          node {""" + node_info + """ }
         }
       }
     }
@@ -69,8 +71,9 @@ def get_open_nodes_query(node_type, cursor=None):
 
 _cached_results = {}
 
-def get_nodes(node_type):
-    if node_type in _cached_results:
+def get_nodes(node_type, node_info, states):
+    key = node_type + node_info
+    if key in _cached_results:
         return _cached_results[node_type]
     all_nodes = {}
     endCursor = None
@@ -79,7 +82,7 @@ def get_nodes(node_type):
     while True:
         sys.stdout.write(".")
         sys.stdout.flush()
-        result = run_query(get_open_nodes_query(node_type, endCursor))
+        result = run_query(get_open_nodes_query(node_type, node_info, states, endCursor))
         try:
             nodes = result["data"]["repositoryOwner"]["repository"][node_type + "s"]
             edges = nodes["edges"]
@@ -97,11 +100,11 @@ def get_nodes(node_type):
             raise SystemExit()
     sys.stdout.write(os.linesep)
     sys.stdout.flush()
-    _cached_results[node_type] = all_nodes
+    _cached_results[key] = all_nodes
     return all_nodes 
 
 def show_unassigned_nodes(node_type):
-    nodes = get_nodes(node_type)
+    nodes = get_nodes(node_type, _node_info1, states='OPEN')
     total_unassigned = 0
     print("====================================================================================================")
     print("Unassigned open " + node_type + "s")
@@ -120,7 +123,7 @@ def parse_datetime(s):
     return datetime.datetime.fromisoformat(s)
 
 def show_no_recent_activity_nodes(node_type):
-    nodes = get_nodes(node_type)
+    nodes = get_nodes(node_type, _node_info1, states='OPEN')
     now = datetime.datetime.now()
     print("====================================================================================================")
     print("Open " + node_type + "s that have not been commented on by an Oracle employee for more than 30 days")
@@ -151,8 +154,50 @@ def show_no_recent_activity_nodes(node_type):
                 print('{}: "{}" ({} days, {})'.format(node["url"], node["title"], delta.days, url))
     print()
 
+_node_info2 = """
+number
+author {
+  ... on User {
+    login
+    organizations(first:5) {
+      edges {
+        node {
+          login
+        }
+      }
+    }
+  }
+}
+createdAt
+closedAt
+"""
+
+def show_nodes_opened_per_year(node_type):
+    states = '[OPEN,CLOSED,MERGED]' if node_type == 'pullRequest' else '[OPEN,CLOSED]'
+    nodes = get_nodes(node_type, _node_info2, states=states)
+    now = datetime.datetime.now()
+    print("====================================================================================================")
+    print(node_type + "s opened per year")
+    print("====================================================================================================")
+    opened_per_year = {}
+    for node in nodes.values():
+        author = node["author"]
+        if author:
+            created_at = parse_datetime(node["createdAt"])
+            orgs = frozenset([e["node"]["login"] for e in author["organizations"]["edges"]])
+            opened = opened_per_year.setdefault(created_at.year, {})
+            key = "oracle" if "oracle" in orgs else "other"
+            opened[key] = opened.get(key, 0) + 1
+    for year, opened in opened_per_year.items():
+        counts = '\t'.join('{}={}'.format(label, value) for label, value in sorted(opened.items()))
+        print('{}: {}'.format(year, counts))
+    print()
+
 show_no_recent_activity_nodes('issue')
 show_no_recent_activity_nodes('pullRequest')
 
 show_unassigned_nodes('pullRequest')
 show_unassigned_nodes('issue')
+
+show_nodes_opened_per_year('issue')
+show_nodes_opened_per_year('pullRequest')
