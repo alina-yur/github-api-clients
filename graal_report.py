@@ -132,18 +132,19 @@ def show_no_recent_activity_nodes(node_type):
         timeline = node["timelineItems"]
         last_oracle_comment = None
         for edge in timeline["edges"]:
+            if not edge or not edge["node"]:
+              continue
             item = edge["node"]
-            if item:
-                author = item["author"]
-                if author and author["organization"]:
-                    # guaranteed to be "oracle" organization
-                    if last_oracle_comment is None:
-                        last_oracle_comment = (item["url"], parse_datetime(item["updatedAt"]))
-                    else:
-                        url, previous_updated_at = last_oracle_comment
-                        updated_at = parse_datetime(item["updatedAt"])
-                        if updated_at > previous_updated_at:
-                            last_oracle_comment = (item["url"], updated_at)
+            author = item["author"]
+            if author and author["organization"]:
+                # guaranteed to be "oracle" organization
+                if last_oracle_comment is None:
+                    last_oracle_comment = (item["url"], parse_datetime(item["updatedAt"]))
+                else:
+                    url, previous_updated_at = last_oracle_comment
+                    updated_at = parse_datetime(item["updatedAt"])
+                    if updated_at > previous_updated_at:
+                        last_oracle_comment = (item["url"], updated_at)
 
         if not last_oracle_comment:
             print('{}: "{}" (no Oracle comments)'.format(node["url"], node["title"]))
