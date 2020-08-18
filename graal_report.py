@@ -74,7 +74,7 @@ _cached_results = {}
 def get_nodes(node_type, node_info, states):
     key = node_type + node_info
     if key in _cached_results:
-        return _cached_results[node_type]
+        return _cached_results[key]
     all_nodes = {}
     endCursor = None
     sys.stdout.write("Getting " + node_type + "s")
